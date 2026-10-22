@@ -1,0 +1,333 @@
+VirtualBox
+Debian 13 Trixie (64-bit)
+VM name: ferde-so42 
+host name: ferde-so42
+Base memory: 2048 MB
+Number of CPUs: 2
+Disk Size: 30 GB
+
+root user: ferde-so
+Senha (W): PauBrasil11
+normal user: ferde-so
+Senha (W): PauBrasil22
+encryption senha: PauBrasil33
+
+
+(login as root)
+su -
+(logout from root)
+logout
+su - ferde-so
+
+
+SSH---------------------
+(open file) nano /etc/ssh/sshd_config.d/42-born2beroot.conf
+
+(write)
+"Port 4242
+PermitRootLogin no"
+(save)
+Press Ctrl + O to save.
+Press Enter to confirm the filename.
+Press Ctrl + X to exit
+
+(validate) sshd -t
+(check the effective settings) sshd -T | grep -E '^(port|permitrootlogin) 
+(apply the configuration) systemctl restart ssh
+(verify) systemctl status ssh --no-pager
+
+
+UFW---------------------
+ufw status
+(if no command,install it)
+apt update
+apt install ufw
+(Configure the firewall)
+(block incoming connections) ufw default deny incoming
+(allow outgoing connections) ufw default allow outgoing
+(permit incoming SSH connections on port 4242) ufw allow 4242/tcp
+(enable the firewall) ufw status verbose
+
+
+PASSWORD POLICY---------------------
+(Install the password-policy module) apt install libpam-pwquality
+(Configure password aging) 
+nano /etc/login.defs
+"PASS_MAX_DAYS   30
+PASS_MIN_DAYS   2
+PASS_WARN_AGE   7"
+(Configure password complexity) 
+nano /etc/security/pwquality.conf
+"minlen = 10
+ucredit = -1
+lcredit = -1
+dcredit = -1
+maxrepeat = 3
+usercheck = 1
+difok = 7"
+
+minlen = 10: at least 10 characters.
+ucredit = -1: at least one uppercase letter.
+lcredit = -1: at least one lowercase letter.
+dcredit = -1: at least one digit.
+maxrepeat = 3: no more than three consecutive identical characters.
+usercheck = 1: reject passwords containing the username.
+difok = 7: require at least seven characters to differ from the previous password, subject to PAM's comparison rules.
+
+Editing pwquality.conf defines the rules, but the PAM configuration determines whether password changes use them.
+
+(Inspect the PAM configuration) 
+grep -n 'pam_pwquality\|pam_unix' /etc/pam.d/common-password
+
+(check user password policy)
+chage -l [your_login or root]
+
+(Set password aging for your user)
+chage -M 30 -m 2 -W 7 [your_login or root]
+
+Maximum password age: 30 days
+Minimum time between password changes: 2 days
+Expiration warning: 7 days
+
+(Enforce password history)
+(Install sudo)
+apt update
+apt install sudo
+
+(check whether the user42 group exists)
+getent group user42
+
+(create group)
+groupadd user42
+
+(add users to the group)
+usermod -aG sudo,user42 ferde-so
+
+(check result)
+groups ferde-so
+
+(verify sudo is installed)
+sudo --version
+visudo -c
+
+(Find the sudo configuration)
+grep -E '^[[:space:]]*Defaults' /etc/sudoers
+
+(create new settings file to organize things better)
+mkdir -p /var/log/sudo
+chmod 700 /var/log/sudo
+
+(open a new sudoers configuration file safe)
+visudo -f /etc/sudoers.d/42-born2root
+
+"Defaults        passwd_tries=3
+Defaults        badpass_message="Incorrect password. Please try again."
+Defaults        logfile="/var/log/sudo/sudo.log"
+Defaults        log_input,log_output
+Defaults        requiretty"
+
+passwd_tries=3: allow at most three password attempts.
+badpass_message: display your custom message when authentication fails.
+logfile: record sudo activity in the specified log file.
+log_input,log_output: enable logging of command input and output.
+requiretty: require sudo to run from a terminal.
+
+(validate configuration)
+visudo -c
+
+
+(verify SSH and the firewall)----------------------
+
+sshd -T | grep -E '^(port|permitrootlogin) '
+systemctl status ssh --no-pager
+ufw status verbose
+
+(if firewall is inactive)
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow 4242/tcp
+ufw enable
+
+
+(the monitoring script)----------------
+(disk and LVM layout) lsblk
+(memory) free -m
+(root filesystem usage) df -h /
+(CPU count) nproc
+(last boot time) uptime -s
+(logged-in users) who
+
+Requirement	Linux command or approach
+OS and kernel architecture:	uname, /etc/os-release
+Physical CPU count and vCPU count:	/proc/cpuinfo, nproc
+RAM usage and percentage:	free
+Disk usage and percentage:	df
+CPU utilization:	vmstat or /proc/stat
+Last reboot:	who -b or uptime -s
+LVM active:	lsblk
+TCP connections:	ss
+Logged-in users:	who
+IPv4 and MAC address:	ip
+Sudo command count:	sudo log
+
+We'll print the report using wall, which broadcasts a message to logged-in terminal sessions.
+
+(create the file)
+nano /usr/local/bin/monitoring.sh
+
+"#!/bin/bash
+
+ARCH=$(uname -a)
+CPU_PHYSICAL=$(grep '^physical id' /proc/cpuinfo | sort -u | wc -l)
+CPU_VIRTUAL=$(grep -c '^processor' /proc/cpuinfo)
+RAM_TOTAL=$(free -m | awk '/^Mem:/ {print $2}')
+RAM_USED=$(free -m | awk '/^Mem:/ {print $3}')
+RAM_PERCENT=$(free | awk '/^Mem:/ {printf("%.2f"), $3/$2*100}')
+DISK_TOTAL=$(df -h / | awk 'NR==2 {print $2}')
+DISK_USED=$(df -h / | awk 'NR==2 {print $3}')
+DISK_PERCENT=$(df -h / | awk 'NR==2 {print $5}')
+
+# CPU utilization
+CPU_LOAD=$(vmstat 1 2 | tail -1 | awk '{printf "%.1f", 100-$15}')
+
+# Last reboot
+LAST_BOOT=$(who -b | awk '{print $3, $4}')
+
+# LVM status
+LVM_STATUS=$(lsblk -o TYPE | grep -q lvm && echo yes || echo no)
+
+# Established TCP connections
+TCP_CONNECTIONS=$(ss -t state established | tail -n +2 | wc -l)
+
+# Logged-in users
+USER_COUNT=$(who | wc -l)
+
+# IPv4 address and MAC address
+IP_ADDRESS=$(ip -4 -o addr show scope global | awk 'NR==1 {split($4,a,"/"); print a[1]}')
+MAC_ADDRESS=$(ip link show | awk '/link\/ether/ {print $2; exit}')
+
+# Sudo commands logged
+SUDO_COMMANDS=$(grep -c 'COMMAND=' /var/log/sudo/sudo.log 2>/dev/null)
+SUDO_COMMANDS=${SUDO_COMMANDS:-0}
+
+MSG="\
+#Architecture: $ARCH
+#Physical CPU: $CPU_PHYSICAL
+#vCPU: $CPU_VIRTUAL
+#Memory Usage: ${RAM_USED}/${RAM_TOTAL}MB (${RAM_PERCENT}%)
+#Disk Usage: ${DISK_USED}/${DISK_TOTAL} (${DISK_PERCENT})
+#CPU load: ${CPU_LOAD}%
+#Last boot: $LAST_BOOT
+#LVM use: $LVM_STATUS
+#TCP Connections: $TCP_CONNECTIONS ESTABLISHED
+#User log: $USER_COUNT
+#Network: IP $IP_ADDRESS ($MAC_ADDRESS)
+#Sudo: $SUDO_COMMANDS cmd
+
+wall "$MSG"
+"
+
+$(...) runs a command and captures its output in a variable.
+awk selects fields or performs calculations on command output.
+wall sends the report to logged-in users' terminals.
+nproc gives the number of processing units available to the system. In your VM, that should be 2.
+vmstat 1 2 takes two samples one second apart. We use the second sample because it better reflects current CPU activity than the initial sample.
+lsblk reports lvm if an LVM logical volume is present. The command checks for that type.
+ss lists socket information; state established limits the count to established TCP connections.
+who reports logged-in sessions, so this count is sessions rather than necessarily unique people.
+grep -c 'COMMAND=' counts command records in the sudo log, not necessarily every command inside a shell session.
+
+(Make the script executable and run it)
+chmod +x /usr/local/bin/monitoring.sh
+/usr/local/bin/monitoring.sh
+
+(Check that cron is installed and running)---------
+apt install cron
+systemctl enable --now cron
+systemctl status cron --no-page
+
+(Open root's crontab) crontab -e
+(chose nano)
+"*/10 * * * * /usr/local/bin/monitoring.sh"
+(verify) crontab -l
+"@reboot /usr/local/bin/monitoring.sh"
+(verify) crontab -l
+
+(inspect cron's service status)
+systemctl status cron --no-pager
+
+(look for execution records after the next 10-minute interval)
+journalctl -u cron --since "15 minutes ago" --no-pager
+
+--------------------------------------
+(Inspect the block devices)---------------
+(shows the device hierarchy and LVM layers)
+lsblk
+(shows the device hierarchy and LVM layers adds filesystem types, UUIDs, and mount points)
+lsblk -f
+
+(Check the encrypted devices)---------------
+(lists configured encrypted volumes that are unlocked during boot)
+sudo dmsetup ls --tree
+cat /etc/crypttab
+
+(Check LVM)---------------
+(physical volumes) pvs
+(volume groups) vgs
+(logical volumes managed by LVM) lvs
+
+(check the structure)---------------
+lsblk -o NAME,TYPE,FSTYPE,MOUNTPOINTS
+sudo cryptsetup status sda5_crypt
+
+--------------------------------------
+(verify that no graphical server is installed)---------------
+dpkg -l | grep -E 'xserver-xorg|wayland|gnome-shell|gdm3|plasma-desktop|xfce4'
+(it should show nothing, no libraires)
+systemctl get-default (it should show "multi-user.target")
+tasksel --list-tasks (You should not see a desktop environment selecte)
+i = task is installed.
+u = task is not installed.
+
+--------------------------------------
+(verify AppArmor)---------------
+systemctl is-enabled apparmor
+systemctl is-active apparmor
+
+
+(signature)--------------------------------------
+For Born2BeRoot, the important thing is to calculate the SHA-1 hash of your virtual machine's disk image, not the Debian ISO, the VM configuration, or signature.txt itself.
+
+Important: Make sure the VM is fully shut down, not saved or suspended, before calculating the hash. Don't modify the disk between calculating the hash and submitting it.
+
+certutil -hashfile "E:\ferde-so42\ferde-so42.vdi" SHA1
+certutil -hashfile "M:\ferde-so42\ferde-so42.vdi" SHA1
+
+certutil is a Windows utility.
+-hashfile tells it to calculate a hash of a file.
+SHA1 specifies the hashing algorithm.
+SHA-1 produces a 160-bit digest, conventionally displayed as 40 hexadecimal characters.
+
+Step A — Connect the pendrive
+Plug it into the other computer and locate the copied VM folder.
+
+Step B — Open the VM configuration
+Double-click the .vbox file, or open VirtualBox and choose Machine → Add, then select the .vbox file.
+
+Step C — Start Debian
+Enter your disk-encryption passphrase when prompted during boot. This is the passphrase you set for encrypted LVM, not necessarily your Linux user password.
+
+
+https://github.com/Ayouub-aj/born2beroot
+https://noreply.gitbook.io/born2beroot/correction-preparation/correction-sheet
+https://github.com/mlrcbsousa/Born2beRoot/blob/main/Evaluation.md
+https://noreply.gitbook.io/born2beroot/correction-preparation/evaluation-answer
+https://github.com/DevPapito/Born2beroot
+
+
+
+
+
+
+
+
