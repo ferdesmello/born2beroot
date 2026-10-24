@@ -6,7 +6,7 @@ _This project has been created as part of the 42 curriculum by ferde-so._
 
 Born2Beroot is a system administration project from the 42 curriculum. Its goal is to create and configure a secure virtual machine according to a strict set of requirements.
 
-The project introduces virtualization, Linux system administration, disk encryption, user and group management, password policies, SSH, firewall configuration, sudo (super user do) privileges, and system monitoring.
+The project introduces virtualization, Linux system administration, disk encryption, user and group management, password policies, SSH, firewall configuration, sudo privileges, and system monitoring.
 
 I implemented the project using Debian in VirtualBox, without a graphical desktop environment. The system is configured to use encrypted LVM partitions, a non-root administrative user, SSH on a non-default port, UFW, and a monitoring script that periodically broadcasts system information to logged-in terminals.
 
@@ -54,11 +54,12 @@ sudo crontab -l
 
 ## Resources
 
-- Born2beroot subject
+- Born2Beroot subject
 - [Debian](https://www.debian.org/)
 - [Wikipedia](https://wikipedia.org/)
 - [reddit](https://www.reddit.com/)
 - [VirtualBox](https://www.virtualbox.org/)
+- [Boorn2Beroot guide](https://noreply.gitbook.io/born2beroot)
 
 ### AI use
 
@@ -156,28 +157,465 @@ The choice depends on the host computer, guest architecture, operating-system su
 
 ## Verification commands
 
-The following commands were useful for checking the system configuration. They can also be used during evaluation to demonstrate that specific requirements are satisfied.
+The following commands were useful for checking the system configuration.
 
-| Requirement | Command |
-|---|---|
-| Hostname | `hostnamectl` |
-| Current user and groups | `id <user_name>` |
-| Operating system and kernel | `uname -a` and `cat /etc/os-release` |
-| SSH service status | `sudo systemctl status ssh` |
-| SSH port and root-login policy | `sudo sshd -T \| grep -E '^(port\|permitrootlogin) '` |
-| Firewall status | `sudo ufw status verbose` |
-| Password-aging policy | `sudo chage -l <user_name>` |
-| Sudo configuration syntax | `sudo visudo -c` |
-| Sudo privileges | `sudo -l` |
-| AppArmor status | `sudo systemctl is-active apparmor` |
-| Encrypted container status | `sudo cryptsetup status sda5_crypt` |
-| Logical volumes and mounts | `lsblk -o NAME,TYPE,FSTYPE,MOUNTPOINTS` |
-| Cron schedule | `sudo crontab -l` |
-| Monitoring script syntax | `bash -n /usr/local/bin/monitoring.sh` |
+#### No graphical interface
+
+* ulti-user.target / graphical.target
+
+```bash
+systemctl get-default
+```
+
+* No graphycal servers:
+```bash
+dpkg -l | grep -E "xserver-xorg|x11-common"
+```
+
+* No screen managements
+
+```bash
+dpkg -l | grep -E "gdm3|lightdm|sddm|xdm"
+```
+
+* No startx command
+
+```bash
+whereis startx
+```
+
+---
+
+#### User must not be root
+
+* Show user / root
+
+```bash
+whoami
+```
+
+* User id
+
+```bash
+id
+```
+
+* If terminal prompt ends in `$` instead of `#`, it is not root.
+
+---
+
+#### Active services
+
+* UFW service state
+
+```bash
+sudo ufw status numbered
+```
+
+* SSH service state
+
+```bash
+sudo systemctl status ssh
+```
+
+* OS is Debian or Rocky
+
+```bash
+hostnamectl
+```
+
+---
+
+#### User interface
+
+* New user
+
+```bash
+sudo adduser <username>
+```
+
+* Assign new user to sudo group
+
+```bash
+sudo adduser <new_user> sudo
+```
+
+* New group
+
+```bash
+sudo groupadd <groupname>
+```
+
+* Check if group exists
+
+```bash
+getent group <groupname>
+```
+
+* Add user to group
+
+```bash
+sudo usermod -aG <grupo> <username>
+```
+
+* Remove user from group
+
+```bash
+sudo deluser <username> <groupname>
+```
+
+* User groups
+
+```bash
+groups <username>
+```
+
+* List all users
+
+```bash
+cut -d: -f1 /etc/passwd
+```
+
+* Delete user
+
+```bash
+sudo deluser <username>
+sudo deluser --remove-home <username>
+sudo deluser --remove-all-files <username>
+```
+
+* List all groups
+
+```bash
+cut -d: -f1 /etc/group
+```
+
+* List users in group sudo
+
+```bash
+getent group sudo
+```
+
+* Delete group
+
+```bash
+sudo groupdel <groupname>
+sudo deluser <username> <groupname>
+```
+
+* Change user password
+
+```bash
+sudo passwd <username>
+```
+
+* Lock / unlock a user
+
+```bash
+sudo passwd -l <username>
+sudo passwd -u <username>
+```
+
+* Login under user
+
+```bash
+sudo login <username>
+```
+
+---
+
+#### Password
+
+* Password complexity rules
+
+```bash
+nano /etc/security/pwquality.conf
+```
+
+* Password expiration rules
+
+```bash
+nano /etc/login.defs
+```
+
+* Apply to existing users (including root):
+
+```bash
+sudo chage -M 30 <username>
+sudo chage -m 2 <username>
+sudo chage -W 7 <username>
+```
+
+---
+
+#### Machine hostname
+
+* Check hostname
+
+```bash
+hostname
+```
+* Change hostname
+
+```bash
+sudo hostnamectl set-hostname <new_hostname>
+```
+
+---
+
+#### Partitioning
+
+* MV's partitioning, LVM (Logical Volume Manager) and cryptography
+
+```bash
+lsblk
+```
+
+* Verify free / used space
+
+```bash
+df -h
+```
+
+* More details of physical, group, and virtual volumes
+
+```bash
+sudo pvdisplay
+sudo vgdisplay
+sudo lvdisplay
+```
+
+---
+
+#### AppArmor
+
+* Check status
+
+```bash
+sudo aa-status
+```
+
+* Verify if starts on boot
+
+```bash
+sudo systemctl status apparmor
+```
+
+---
+
+#### SUDO
+
+* Sudo status
+
+```bash
+sudo -V
+sudo --version
+sudo visudo -c
+which sudo
+```
+
+* Sudo rules
+
+```bash
+sudo visudo -f /etc/sudoers.d/42-born2beroot
+```
+
+```text
+passwd_tries=3: allow at most three password attempts.
+badpass_message: display your custom message when authentication fails.
+logfile: record sudo activity in the specified log file.
+log_input,log_output: enable logging of command input and output.
+requiretty: TTY, require sudo to run from a terminal.
+secure_path: folders excluded form sudo
+```
+
+* Sudo log
+
+```bash
+sudo ls -la /var/log/sudo/
+```
+
+* Sudo log history (last 5 entrances)
+
+```bash
+sudo tail -n 5 /var/log/sudo/sudo.log
+```
+
+---
+
+### UFW
+
+* UFW status
+
+```bash
+sudo service ufw status
+sudo ufw status verbose
+dpkg -s ufw
+```
+
+* UFW rules
+
+```bash
+sudo ufw status numbered
+```
+
+* Add new UFW port
+
+```bash
+sudo ufw allow <port>
+```
+
+* Remove UFW port
+
+```bash
+sudo ufw delete <port_number>
+```
+
+* Block incoming connections
+
+```bash
+ufw default deny incoming
+```
+
+* Allow outgoing connections
+
+```bash
+ufw default allow outgoing
+```
+
+---
+
+#### SSH
+
+* SSH status
+
+```bash
+sudo systemctl status ssh
+sudo service ssh status
+```
+
+* SSH rules
+
+```bash
+sudo nano /etc/ssh/sshd_config.d/42-born2beroot.conf
+sudo nano /etc/ssh/sshd_config
+sudo nano /etc/ssh/ssh_config
+```
+
+* On terminal
+
+localhost can be the machine IP 127.0.0.1, 0.0.0.0, or another. Find out:
+
+```bash
+ip a
+ip route show default
+```
+
+* Configure VirtualBox port redirection
+
+```text
+Setting		Value
+Protocol	TCP
+Host IP		127.0.0.1
+Host Port	424X
+Guest IP	Leave blank
+Guest Port	4242
+```
+
+* On a machine terminal
+
+```bash
+ssh -p 424X <user_login>@<localhost>
+```
+
+* No SSH login as root
+
+```bash
+login root
+ssh -p 424X root@<localhost>
+```
+
+---
+
+#### monitoring.sh
+
+* Show / edit
+
+```bash
+nano /usr/local/bin/monitoring.sh
+```
+
+#### cron
+
+* Cron status
+
+```bash
+systemctl status cron
+```
+
+#### crontab
+
+* Show / edit
+
+```bash
+sudo crontab -e
+```
+
+* Verify
+
+```bash
+sudo crontab -l
+```
+
+```text
+*/10 * * * * /usr/local/bin/monitoring.sh
+@reboot /usr/local/bin/monitoring.sh
+```
+
+---
+
+### Endings
+
+* End session
+
+```bash
+exit
+```
+
+* Reboot / restart
+
+```bash
+sudo reboot
+```
+
+* Turn off
+
+```bash
+sudo poweroff
+```
+
+---
+
+### Small glossary
+
+| Term | Name | Explanation |
+|---|---|---|
+| apt | advanced package tool | basic and simple Linux package manager |
+| aptitude |  | more complex package manager |
+| sudo | superuser do | program that allows a regular user to execute commands with root privileges in an auditable manner |
+| LVM | logical volume manager | layer between the physical disk and the file system that manages disk storage |
+| UFW | uncomplicated firewall | firewall manager that controls network traffic and access authorization |
+| SSH | secure shell | encrypted network protocol for managing servers remotely |
+| APPArmor | application armor | Linux security module that controls access to resources using users and groups |
+| cron | cronos | task-scheduling daemon |
+| crontab | cron table | schedule of tasks to be executed by cron |
+| wall | write to all | utility used to send a text message to the terminals of all users currently connected to the system. |
+| TCP | transmission control protocol | protocol to providin delivery of a stream of octets (bytes) between applications running on hosts communicating via an IP network |
+
 
 ### Checking the disk signature
 
-The project requires a SHA-1 (Secure Hash Algorithm version 1) signature of the virtual disk. On a Windows computer, the hash can be calculated with:
+The project requires a SHA-1 (Secure Hash Algorithm version 1) signature of the virtual disk. On a Windows computer, the hash can be calculated on the .vdi file with:
 
 ```powershell
 certutil -hashfile "C:\path\to\disk.vdi" SHA1
@@ -188,5 +626,3 @@ On a Linux computer:
 ```bash
 sha1sum path/to/disk.vdi
 ```
-
-Compare the resulting hash with the value stored in `signature.txt`. Make sure to hash the exact virtual disk required by the evaluation procedure, not the `.vbox` configuration file or another copy of the disk.
