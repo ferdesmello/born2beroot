@@ -1,0 +1,249 @@
+---------------------------------------------------
+
+----Não tem ambiente gráfico no launch------------------
+* Inicializa em modo texto, não gráfico:
+systemctl get-default
+(multi-user.target / graphical.target)
+
+* Ausência de Servidores Gráfico:
+dpkg -l | grep -E "xserver-xorg|x11-common"
+
+* Ausência de gerenciadores de tela
+dpkg -l | grep -E "gdm3|lightdm|sddm|xdm"
+
+* comando startx não existe
+whereis startx
+
+----User must not be root------------------
+* mostra usuário, não root
+whoami
+
+* ID do user e grupos (deve ser 1000+ não 0)
+id
+
+Se propmpt to terminal termina em $, é user normal, se termina em #, é root
+
+----UFW service is started------------------
+sudo ufw status numbered
+
+----SSH service is started------------------
+sudo systemctl status ssh
+
+----OS is Debian or Rocky------------------
+hostnamectl
+
+---------------------------------------------------
+
+----criar novo usuário------------------
+sudo adduser <user_name>
+
+----criar grupo------------------
+sudo groupadd <nome do grupo>
+
+* Checar se grupo existe
+getent group <nome do grupo>
+
+----adicionar usuário ao grupo------------------
+sudo usermod -aG <grupo> <user_name>
+
+----Grupos do usuário------------------
+groups <user_name>
+
+----deletar usuário e grupo------------------
+* list all users
+cut -d: -f1 /etc/passwd
+sudo deluser <user_name>
+sudo deluser --remove-home <user_name>
+sudo deluser --remove-all-files <user_name>
+
+* list all groups
+cut -d: -f1 /etc/group
+sudo groupdel <grupo>
+sudo deluser <user_name> <grupo>
+
+----mostrar regras de senha------------------
+* complexidade de senha
+nano /etc/security/pwquality.conf
+
+"minlen = 10
+ucredit = -1
+lcredit = -1
+dcredit = -1
+maxrepeat = 3
+usercheck = 1
+difok = 7"
+
+* expiração de senha
+nano /etc/login.defs
+
+"PASS_MAX_DAYS   30
+PASS_MIN_DAYS   2
+PASS_WARN_AGE   7"
+
+---------------------------------------------------
+----checar hostname da máquina------------------
+hostname
+
+----mudar hostname da máquina------------------
+sudo hostnamectl set-hostname <novo_hostname>
+
+----reboot / restart------------------
+sudo reboot
+hostname
+
+----Partitions for VM------------------
+* estrutura de partições da MV e comprovar que LVM (Logical Volume Manager) e criptografia
+lsblk
+
+* Verificar o espaço livre/usado nos sistemas de arquivos
+df -h
+
+sudo pvdisplay
+sudo vgdisplay
+sudo lvdisplay
+
+---------------------------------------------------
+----sudo------------------
+* status
+sudo -V
+sudo --version
+sudo visudo -c
+
+* regras
+sudo visudo -f /etc/sudoers.d/42-born2beroot
+
+"Defaults       passwd_tries=3
+Defaults        badpass_message="Incorrect password. Please try again."
+Defaults        logfile="/var/log/sudo/sudo.log"
+Defaults        log_input,log_output
+Defaults        requiretty"
+
+passwd_tries=3: allow at most three password attempts.
+badpass_message: display your custom message when authentication fails.
+logfile: record sudo activity in the specified log file.
+log_input,log_output: enable logging of command input and output.
+requiretty: require sudo to run from a terminal.
+
+* log existe?
+sudo ls -la /var/log/sudo/
+
+* histórico de logs
+sudo cat /var/log/sudo/sudo.log
+
+* checar últimos usos de sudo
+sudo tail -n 5 /var/log/sudo/sudo.log
+
+----UFW------------------
+* status
+sudo ufw status verbose
+
+* regras ativas
+sudo ufw status numbered
+
+* incluir nova porta
+sudo ufw allow <porta>
+
+* excluir porta
+sudo ufw delete <N da porta>
+
+-------------------------
+* block incoming connections
+ufw default deny incoming
+
+* allow outgoing connections
+ufw default allow outgoing
+
+* permit incoming SSH connections on port 4242
+ufw allow 4242/tcp
+
+----SSH------------------
+* status
+sudo systemctl status ssh
+
+* regras
+sudo nano /etc/ssh/sshd_config.d/42-born2beroot.conf
+• Port 4242
+• PermitRootLogin no
+
+* fora da VM, no terminal
+localhost pode ser o IP da máquina 127.0.0.1 ou descobrir com :
+ip a (inet 192.168.1.15)
+ip route show default (192.168.64.1)
+
+* configure VirtualBox
+Setting		Value
+Protocol	TCP
+Host IP		127.0.0.1
+Host Port	4243
+Guest IP	Leave blank
+Guest Port	4242
+
+* fora da VM, no terminal
+ssh -p 4243 <user_login>@<localhost>
+
+* fora da VM, no terminal (não funciona)
+ssh -p 4243 root@<localhost>
+
+---------------------------------------------------
+----monitoring.sh------------------
+* show the file
+nano /usr/local/bin/monitoring.sh
+
+
+----cron------------------
+* cron is active
+systemctl status cron
+
+----crontab------------------
+* entrar em root para avaliar crontab
+su - root
+
+* edity
+crontab -e
+
+* verify
+crontab -l
+
+"*/10 * * * * /usr/local/bin/monitoring.sh"
+"@reboot /usr/local/bin/monitoring.sh"
+
+---------------------------------------------------
+
+* Sair da sessão:
+exit
+
+* reiniciar:
+sudo reboot
+
+* desligar:
+sudo poweroff
+
+---------------------------------------------------
+
+apt -> "advanced package tool" (gerenciador de pacotes básico e simples do linux)
+aptitude -> (gerenciador de pacotes mais complexo)
+sudo -> "superuser do" (programa que permite um usuário comum executar comandos de privilégio, de root de maneira auditada)
+LVM -> "logical volume manager" (camada entre disco real e o sistema de arquivos, gerencia os armazenamentos nos discos)
+UFW -> "uncomplicated firewall" (gerenciador de firewall, controla o tráfego de rede e autorização de acesso)
+SSH -> "secure shell" (protocolo de rede criptografado para gerenciar servidores remotamente)
+APPArmor -> "application armor" (módulo de segurança do linux que controla acesso a recursos por grupos e usuários)
+cron -> "cronos" (daemon agendador de tarefas)
+crontab -> "cron table" (dados de horários para as a tarefas a serem executadas)
+
+---------------------------------------------------
+
+Press Ctrl + O to save.
+Press Enter to confirm the filename.
+Press Ctrl + X to exit
+
+---------------------------------------------------
+
+SHA-256 (Secure Hash Algorithm version 256) signature of the virtual disk.
+
+* powershell
+certutil -hashfile "C:\path\to\disk.vdi" SHA256
+
+* bash
+sha256sum path/to/disk.vdi
+
+---------------------------------------------------
